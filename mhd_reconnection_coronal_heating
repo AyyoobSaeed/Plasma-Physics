@@ -1,0 +1,955 @@
+"""
+2D Magnetohydrodynamic (MHD) Magnetic Reconnection -- a coronal-heating model
+=============================================================================
+
+A self-contained Python/Matplotlib simulation and visualisation of resistive
+magnetic reconnection in a solar-coronal current sheet, and the plasma heating
+that reconnection produces.
+
+--------------------------------------------------------------------------------
+WHY THIS MODEL? (the physics in one paragraph)
+--------------------------------------------------------------------------------
+The Sun's corona is ~1-3 million K, yet sits above a 5800 K photosphere; supplying
+that heat against radiative + conductive losses is the "coronal heating problem"
+[Klimchuk 2006].  Parker's nanoflare model [Parker 1972, 1988] proposes that
+photospheric motions braid coronal magnetic field into thin CURRENT SHEETS that
+repeatedly reconnect, converting stored magnetic energy into heat and bulk flows.
+Magnetic reconnection [Sweet 1958; Parker 1957; Priest & Forbes 2000] is the
+breaking and re-joining of field lines at an X-point, enabled by a small but
+finite resistivity.  This script reproduces that mechanism in 2D: a current sheet
+goes unstable to the resistive TEARING mode [Furth, Killeen & Rosenbluth 1963],
+forms magnetic islands/plasmoids, drives Alfvenic outflow JETS, and dissipates
+the released magnetic energy as Ohmic (eta*J^2) heat -- the coronal-heating
+signature.
+
+--------------------------------------------------------------------------------
+GOVERNING EQUATIONS  (2D incompressible reduced resistive MHD)
+--------------------------------------------------------------------------------
+"Reduced MHD" [Kadomtsev & Pogutse 1974; Strauss 1976; Biskamp 2000, ch. 2-4] is
+the standard low-beta, 2D model for reconnection.  In the (x, y) plane the in-
+plane magnetic and velocity fields are written through a flux function psi and a
+stream function phi.  This guarantees the field is EXACTLY divergence-free
+(del.B = 0), the central numerical difficulty of MHD [Brackbill & Barnes 1980;
+Toth 2000]:
+
+    B = z_hat x grad(psi)   =>  Bx = -d(psi)/dy ,  By =  d(psi)/dx
+    v = z_hat x grad(phi)   =>  vx = -d(phi)/dy ,  vy =  d(phi)/dx
+
+The out-of-plane current density and vorticity are then scalar Laplacians:
+
+    j = z_hat.(curl B) = laplacian(psi) ,   w = z_hat.(curl v) = laplacian(phi)
+
+With the normalisation rho = mu0 = 1 (lengths in L, speeds in the Alfven speed
+v_A, times in the Alfven time tau_A = L/v_A) and the Poisson bracket
+[a,b] = (da/dx)(db/dy) - (da/dy)(db/dx)  (which equals the advective derivative,
+since v.grad f = [phi, f] and B.grad f = [psi, f]):
+
+    d(psi)/dt = -[phi, psi] + eta * laplacian(psi)             (induction / Ohm's law)
+    d(w)/dt   = -[phi, w]   + [psi, j] + nu * laplacian(w)     (vorticity / momentum)
+    d(T)/dt   = -[phi, T]   + eta*j^2 + nu*w^2 + kappa*lap(T)  (internal energy)
+
+  * induction  : Faraday + resistive Ohm's law E = -v x B + eta*J  [Biskamp 2000].
+                 eta is the magnetic diffusivity; S = v_A L / eta is the Lundquist
+                 number.
+  * vorticity  : curl of the momentum equation; the [psi, j] term IS the curl of
+                 the Lorentz force J x B that accelerates the reconnection jets.
+  * energy     : Ohmic (eta*j^2) + viscous (nu*w^2) dissipation heats the plasma,
+                 exactly the irreversible heating bookkeeping of a resistive MHD
+                 code such as Lare3D [Arber et al. 2001].
+
+--------------------------------------------------------------------------------
+NUMERICAL METHOD
+--------------------------------------------------------------------------------
+* Fourier PSEUDO-SPECTRAL spatial discretisation on a doubly-periodic box:
+  derivatives are exact (multiplication by i*k), nonlinear products are formed in
+  real space, with the 2/3-rule to remove aliasing errors [Orszag 1971; Canuto,
+  Hussaini, Quarteroni & Zang 1988; Boyd 2001].
+* INTEGRATING-FACTOR (exponential) RK4 time stepping: the stiff linear diffusion
+  operators (eta,nu,kappa * k^2) are integrated EXACTLY via exp(-D k^2 dt), and
+  the nonlinear advection by classic RK4.  This is the standard cure for stiff
+  spectral PDEs and stays stable at large S [Cox & Matthews 2002; Kassam &
+  Trefethen 2005; Trefethen 2000].
+* Adaptive time step set by the Courant-Friedrichs-Lewy condition [CFL 1928].
+
+--------------------------------------------------------------------------------
+REFERENCE LIBRARIES (used as primary sources / building blocks)
+--------------------------------------------------------------------------------
+* PlasmaPy  -- plasmapy.formulary gives the coronal plasma parameters that
+               normalise the run  [PlasmaPy Community 2024, JOSS 9, 6053].
+* Astropy   -- astropy.units / .constants carry physical units & constants
+               [Astropy Collaboration 2013, 2018, 2022].
+* Lare3D    -- Warwick Plasma's Lagrangian-remap resistive-MHD code; its energy
+               bookkeeping (Ohmic + viscous/shock heating -> internal energy) and
+               div(B)=0 treatment guided this formulation [Arber et al. 2001].
+
+--------------------------------------------------------------------------------
+REFERENCES
+--------------------------------------------------------------------------------
+[1]  Parker E.N. 1957, J. Geophys. Res. 62, 509  (Sweet-Parker reconnection)
+[2]  Sweet P.A. 1958, IAU Symp. 6, 123           (Sweet-Parker reconnection)
+[3]  Harris E.G. 1962, Nuovo Cimento 23, 115     (the Harris current sheet)
+[4]  Furth, Killeen & Rosenbluth 1963, Phys. Fluids 6, 459   (tearing instability)
+[5]  Kadomtsev & Pogutse 1974, Sov. Phys. JETP 38, 283       (reduced MHD)
+[6]  Strauss H.R. 1976, Phys. Fluids 19, 134                 (reduced MHD)
+[7]  Parker E.N. 1972, ApJ 174, 499; 1988, ApJ 330, 474      (nanoflare heating)
+[8]  Orszag S.A. 1971, J. Atmos. Sci. 28, 1074               (2/3 de-aliasing)
+[9]  Brackbill & Barnes 1980, J. Comput. Phys. 35, 426       (div(B)=0 problem)
+[10] Canuto, Hussaini, Quarteroni & Zang 1988, "Spectral Methods in Fluid Dynamics"
+[11] Biskamp D. 2000, "Magnetic Reconnection in Plasmas", Cambridge Univ. Press
+[12] Priest & Forbes 2000, "Magnetic Reconnection: MHD Theory & Applications", CUP
+[13] Arber, Longbottom, Gerrard & Milne 2001, J. Comput. Phys. 171, 151  (Lare)
+[14] Birn et al. 2001, J. Geophys. Res. 106, 3715            (GEM reconnection challenge)
+[15] Cox & Matthews 2002, J. Comput. Phys. 176, 430          (exponential integrators)
+[16] Kassam & Trefethen 2005, SIAM J. Sci. Comput. 26, 1214  (ETDRK4)
+[17] Klimchuk J.A. 2006, Solar Phys. 234, 41                 (coronal heating review)
+[18] Loureiro, Schekochihin & Cowley 2007, Phys. Plasmas 14, 100703 (plasmoid instab.)
+[19] Courant, Friedrichs & Lewy 1928, Math. Ann. 100, 32     (CFL condition)
+[20] Astropy Collaboration 2022, ApJ 935, 167;  PlasmaPy Community 2024, JOSS 9, 6053
+
+--------------------------------------------------------------------------------
+OUTPUT
+--------------------------------------------------------------------------------
+* ``reconnection_coronal_heating.mp4`` (or ``.gif``) -- 4-panel animation
+* ``reconnection_final_state.png``                   -- peak-reconnection figure
+* ``reconnection_energy_history.png``                -- energy/heating budget
+
+Run:  python mhd_reconnection_coronal_heating.py   (use --quick for a fast preview)
+"""
+
+from __future__ import annotations
+
+import sys
+import time
+import numpy as np
+
+try:
+    import scipy.fft as _sfft           # multithreaded pocketfft
+
+    def _rfft2(a):
+        return _sfft.rfft2(a, workers=-1)
+
+    def _irfft2(ah, shape):
+        return _sfft.irfft2(ah, s=shape, workers=-1)
+except Exception:                        # fallback to numpy
+    def _rfft2(a):
+        return np.fft.rfft2(a)
+
+    def _irfft2(ah, shape):
+        return np.fft.irfft2(ah, s=shape)
+
+import matplotlib
+
+matplotlib.use("Agg")  # headless / file output
+
+# Use a bundled ffmpeg (via imageio-ffmpeg) for MP4 output if the system has
+# no ffmpeg of its own; falls back silently to a GIF writer otherwise.
+try:
+    import imageio_ffmpeg
+    matplotlib.rcParams["animation.ffmpeg_path"] = imageio_ffmpeg.get_ffmpeg_exe()
+except Exception:
+    pass
+
+import matplotlib.pyplot as plt
+from matplotlib import animation
+
+
+# ----------------------------------------------------------------------------
+# 1.  Coronal plasma parameters via PlasmaPy + Astropy
+# ----------------------------------------------------------------------------
+def coronal_parameters(verbose: bool = True) -> dict:
+    """Compute representative solar-coronal active-region plasma parameters.
+
+    These set the PHYSICAL normalisation of the dimensionless simulation: the
+    code works in units of L, v_A and tau_A = L/v_A, and the numbers below tell
+    us what one "code unit" means in SI for the corona.
+
+    The function returns a dict of plain SI/derived FLOATS and runs with nothing
+    but NumPy, using the standard textbook formulae directly.  If ``astropy`` and
+    ``plasmapy`` are installed it transparently UPGRADES the derived quantities
+    to PlasmaPy's authoritative ``plasmapy.formulary`` values [PlasmaPy Community
+    2024 [20]; Astropy Collaboration 2022 [20]] -- but they are optional, so the
+    simulation still runs if they are missing.
+    """
+    # --- characteristic active-region / coronal current-sheet conditions ---
+    # Typical values for an active-region corona (e.g. Aschwanden 2005, "Physics
+    # of the Solar Corona"; Klimchuk 2006 [17]).  Kept as SI floats.
+    n = 1.0e15                 # number density       [m^-3]  (~1e9 cm^-3)
+    B = 50.0e-4                # magnetic field       [T]     (50 G = 5 mT)
+    T = 2.0e6                  # temperature          [K]     (~2 MK corona)
+    L = 1.0e6                  # macroscopic length   [m]     (1 Mm sheet)
+
+    # --- SI physical constants (CODATA) so we never *require* astropy ---
+    mu0 = 1.25663706212e-6     # vacuum permeability  [H/m]
+    m_p = 1.67262192369e-27    # proton mass          [kg]
+    k_B = 1.380649e-23         # Boltzmann constant   [J/K]
+    e = 1.602176634e-19        # elementary charge    [C]
+    eps0 = 8.8541878128e-12    # vacuum permittivity  [F/m]
+    c_light = 2.99792458e8     # speed of light       [m/s]
+
+    # --- analytic (always-available) derived quantities -------------------
+    rho = n * m_p                                   # mass density [kg/m^3]
+    # Alfven speed v_A = B/sqrt(mu0 rho): speed of the magnetic-tension waves
+    # that carry reconnection outflows; the natural velocity unit of MHD
+    # [Biskamp 2000 [11]; Priest & Forbes 2000 [12]].
+    v_A = B / np.sqrt(mu0 * rho)                    # [m/s]
+    # Ion-acoustic/sound speed c_s = sqrt((gamma_e Z + gamma_i) kB T / m_i),
+    # PlasmaPy defaults gamma_e=1, Z=1, gamma_i=3 -> sqrt(4 kB T/m_p).
+    c_s = np.sqrt(4.0 * k_B * T / m_p)              # [m/s]
+    # Plasma beta = thermal pressure / magnetic pressure = n kB T / (B^2/2mu0).
+    # beta << 1 (here ~3e-3) justifies the low-beta REDUCED-MHD model used below
+    # [Strauss 1976 [6]; Kadomtsev & Pogutse 1974 [5]].
+    plasma_beta = (n * k_B * T) / (B**2 / (2.0 * mu0))
+    tau_A = L / v_A                                 # Alfven transit time = time unit [s]
+    # Kinetic micro-scales -- reported only to show MHD (fluid) validity, L >> these.
+    omega_pi = np.sqrt(n * e**2 / (eps0 * m_p))     # ion plasma frequency [rad/s]
+    d_i = c_light / omega_pi                         # ion inertial length c/w_pi [m]
+    v_th = np.sqrt(2.0 * k_B * T / m_p)             # ion thermal speed [m/s]
+    omega_ci = e * B / m_p                           # ion cyclotron frequency [rad/s]
+    r_ci = v_th / omega_ci                           # ion (thermal) Larmor radius [m]
+
+    # Lundquist number S = mu0 L v_A / eta = v_A L / (magnetic diffusivity).  The
+    # corona is nearly ideal (S ~ 1e12 from classical Spitzer resistivity), so
+    # reconnection is slow unless current sheets thin to tiny scales or become
+    # plasmoid-unstable at S > ~1e4 [Loureiro et al. 2007 [18]].  The *run* uses
+    # a much smaller, numerically resolvable S (see SimulationConfig).
+    S_phys = 1.0e12
+    source = "analytic (NumPy)"
+
+    # --- optional upgrade to authoritative PlasmaPy/Astropy values --------
+    try:
+        import astropy.units as u
+        from plasmapy.formulary import (Alfven_speed, ion_sound_speed, beta,
+                                         inertial_length, gyroradius)
+        nn, BB, TT = n * u.m**-3, B * u.T, T * u.K
+        v_A = Alfven_speed(BB, nn, ion="p+").to_value(u.m / u.s)
+        try:
+            c_s = ion_sound_speed(T_e=TT, T_i=TT, ion="p+").to_value(u.m / u.s)
+        except Exception:
+            c_s = ion_sound_speed(T_e=TT, T_i=TT, particle="p+").to_value(u.m / u.s)
+        plasma_beta = float(beta(TT, nn, BB))
+        d_i = inertial_length(nn, "p+").to_value(u.m)
+        r_ci = gyroradius(BB, particle="p+", T=TT).to_value(u.m)
+        tau_A = L / v_A
+        source = "PlasmaPy / Astropy formulary"
+    except Exception:
+        pass  # astropy/plasmapy absent -> keep the analytic floats above
+
+    # everything below the code uses these plain floats (km/s, s, m, ...)
+    params = dict(
+        n=n, B_T=B, B_G=B / 1e-4, T=T, L=L,
+        v_A_kms=v_A / 1e3, c_s_kms=c_s / 1e3, beta=plasma_beta,
+        tau_A_s=tau_A, d_i_m=d_i, r_ci_m=r_ci, S_phys=S_phys, source=source,
+    )
+
+    if verbose:
+        print("=" * 70)
+        print(" Solar-coronal current-sheet parameters")
+        print("=" * 70)
+        print(f"  number density   n   = {n:.3e} m^-3")
+        print(f"  magnetic field   B   = {B * 1e3:.3f} mT  ({B / 1e-4:.1f} G)")
+        print(f"  temperature      T   = {T:.3e} K")
+        print(f"  length scale     L   = {L:.3e} m")
+        print(f"  Alfven speed     v_A = {v_A / 1e3:.1f} km/s")
+        print(f"  sound speed      c_s = {c_s / 1e3:.1f} km/s")
+        print(f"  plasma beta      b   = {plasma_beta:.4f}")
+        print(f"  Alfven time      tau = {tau_A:.2f} s")
+        print(f"  ion inertial len d_i = {d_i:.2f} m")
+        print(f"  ion gyroradius   r_i = {r_ci:.2f} m")
+        print(f"  (source: {source})")
+        print("=" * 70)
+    return params
+
+
+# ----------------------------------------------------------------------------
+# 2.  Spectral resistive-MHD solver
+# ----------------------------------------------------------------------------
+class SimulationConfig:
+    """Dimensionless control parameters (units: L=1, v_A=1, tau_A=L/v_A=1).
+
+    With this normalisation the resistivity eta equals 1/S (S = Lundquist number)
+    and the viscosity nu equals Pm/S (Pm = magnetic Prandtl number).  We resolve
+    S = 400 rather than the coronal S ~ 1e12: the Sweet-Parker sheet thickness
+    delta ~ L/sqrt(S) [Parker 1957 [1]; Sweet 1958 [2]] must span several grid
+    cells, which is impossible at realistic S without adaptive mesh refinement.
+    S = 400 gives clean, fully-resolved single-island tearing reconnection
+    [Furth, Killeen & Rosenbluth 1963 [4]]; the plasmoid cascade needs S > ~1e4
+    [Loureiro et al. 2007 [18]].
+    """
+    N = 192              # grid points per dimension (spectral resolution)
+    L = 2.0 * np.pi      # domain size (square, doubly-periodic -> FFT-friendly)
+    a = 0.15             # current-sheet half-thickness (Harris scale length) [3]
+    eta = 2.5e-3         # resistivity = 1/S        -> Lundquist number S = 400
+    nu = 5.0e-4          # viscosity   = Pm/S       -> magnetic Prandtl Pm = 0.2
+    kappa = 3.0e-4       # thermal diffusivity of the advected heat field
+    eps = 0.12           # tearing (X-point) perturbation amplitude [4]
+    vpert = 0.30         # converging-flow drive amplitude (driven reconnection) [7]
+    t_end = 55.0         # end time, in Alfven times tau_A
+    cfl = 0.30           # CFL safety factor (advective stability) [19]
+    dt_max = 1.2e-2      # cap on the adaptive time step
+    n_frames = 160       # animation frames to capture
+
+
+class ReconnectionMHD:
+    """Doubly-periodic 2D resistive reduced-MHD pseudo-spectral solver."""
+
+    def __init__(self, cfg: SimulationConfig):
+        self.cfg = cfg
+        N, L = cfg.N, cfg.L
+
+        # real-space grid
+        x = np.linspace(0.0, L, N, endpoint=False)
+        self.x, self.y = np.meshgrid(x, x, indexing="ij")
+        self.dx = L / N
+
+        # Spectral wavenumbers.  In a pseudo-spectral method every field is a
+        # truncated Fourier series and a derivative d/dx becomes multiplication
+        # by i*kx in spectral space -- spectrally accurate, no finite-difference
+        # error [Orszag 1971 [8]; Canuto et al. 1988 [10]; Boyd 2001].  Using a
+        # REAL FFT (rfft2) exploits that the fields are real: full frequency set
+        # on axis 0 (x), half-spectrum on axis 1 (y), so arrays are (N, N//2+1).
+        self.shape = (N, N)
+        kx = 2.0 * np.pi * np.fft.fftfreq(N, d=L / N)       # length N
+        ky = 2.0 * np.pi * np.fft.rfftfreq(N, d=L / N)      # length N//2+1
+        self.kx, self.ky = np.meshgrid(kx, ky, indexing="ij")
+        self.k2 = self.kx**2 + self.ky**2                    # |k|^2 = -laplacian
+        self.k2_inv = np.zeros_like(self.k2)
+        self.k2_inv[self.k2 > 0] = 1.0 / self.k2[self.k2 > 0]  # inverse Laplacian
+
+        # 2/3-rule de-aliasing: a quadratic nonlinearity (the Poisson brackets)
+        # generates wavenumbers up to 2*kmax which alias back onto the grid and
+        # corrupt/destabilise the solution.  Zeroing the top 1/3 of modes after
+        # every product removes that error exactly [Orszag 1971 [8]; Canuto et
+        # al. 1988 [10]].
+        kmax = np.max(np.abs(kx))
+        cut = (2.0 / 3.0) * kmax
+        self.dealias = (np.abs(self.kx) <= cut) & (np.abs(self.ky) <= cut)
+
+        # ---- initial condition: periodic double Harris current sheet -------
+        self.psi_hat, self.w_hat, self.T_hat = self._initial_condition()
+
+        # ---- integrating factors for the linear (diffusion) operators ------
+        # (rebuilt for the chosen dt in run())
+        self.dt = None
+
+        # diagnostics history
+        self.hist = {"t": [], "E_mag": [], "E_kin": [],
+                     "Q_ohm": [], "Q_visc": []}
+        self._Q_ohm = 0.0
+        self._Q_visc = 0.0
+        self._t = 0.0
+
+    # -- spectral helpers ----------------------------------------------------
+    def _fft(self, f):
+        return _rfft2(f)
+
+    def _ifft(self, fh):
+        return _irfft2(fh, self.shape)
+
+    def _ddx(self, fh):
+        return 1j * self.kx * fh
+
+    def _ddy(self, fh):
+        return 1j * self.ky * fh
+
+    def _bracket(self, a_hat, b_hat):
+        """Poisson bracket [a,b] = a_x b_y - a_y b_x  (the 2D Jacobian).
+
+        This single operator encodes ALL advection in reduced MHD: v.grad f =
+        [phi, f] and B.grad f = [psi, f]  [Strauss 1976 [6]; Biskamp 2000 [11]].
+        It is the only nonlinearity, and is evaluated PSEUDO-spectrally: take the
+        four derivatives in spectral space (cheap, exact), transform to real
+        space, multiply, transform back, and de-alias.
+        """
+        ax = self._ifft(self._ddx(a_hat))
+        ay = self._ifft(self._ddy(a_hat))
+        bx = self._ifft(self._ddx(b_hat))
+        by = self._ifft(self._ddy(b_hat))
+        jac = ax * by - ay * bx
+        return self._fft(jac) * self.dealias
+
+    # -- initial condition ---------------------------------------------------
+    def _initial_condition(self):
+        cfg = self.cfg
+        L, a = cfg.L, cfg.a
+        y = self.y
+
+        # HARRIS CURRENT SHEET [Harris 1962 [3]]: a layer where Bx reverses sign,
+        # Bx(y) = B0 tanh(y/a).  The reversal implies a peaked current j = dBx/dy
+        # ~ sech^2(y/a) -- the "current sheet" -- and is the textbook reconnection
+        # equilibrium.  We use TWO opposed sheets (at y=L/4 and y=3L/4) so the
+        # field is periodic in y, as required by the spectral box [Biskamp 2000].
+        Bx = (np.tanh((y - 0.25 * L) / a)
+              - np.tanh((y - 0.75 * L) / a))
+        Bx -= Bx.mean()                  # drop k=0 so psi has no secular ramp
+
+        # Recover the flux function from Bx = -d(psi)/dy by integrating in y;
+        # in spectral space integration is division by i*ky.  psi.const are the
+        # magnetic field lines (B is everywhere tangent to psi=const).
+        Bx_hat = self._fft(Bx)
+        psi_hat = np.zeros_like(Bx_hat)
+        nz = self.ky != 0
+        psi_hat[nz] = -Bx_hat[nz] / (1j * self.ky[nz])  # psi = -int Bx dy
+
+        # TEARING-MODE SEED [Furth, Killeen & Rosenbluth 1963 [4]]: a small
+        # cos(kx0 x) ripple of the flux at the sheets.  A Harris sheet is
+        # linearly UNSTABLE to tearing for k*a < 1 (here k*a = 0.15); the
+        # perturbation reconnects field at periodic X-points and grows magnetic
+        # islands.  One wavelength across the box -> one island chain per sheet.
+        kx0 = 2.0 * np.pi / L
+        dpsi = (cfg.eps
+                * np.cos(kx0 * self.x)
+                * (np.exp(-((y - 0.25 * L) / (2 * a))**2)
+                   + np.exp(-((y - 0.75 * L) / (2 * a))**2)))
+        psi_hat += self._fft(dpsi) * self.dealias
+
+        # DRIVEN-RECONNECTION SEED: a weak stagnation-point flow that pushes
+        # plasma (and frozen-in flux) toward the X-points.  This stands in for
+        # the photospheric/coronal driving that forms and stresses current sheets
+        # in Parker's nanoflare picture [Parker 1972, 1988 [7]], and accelerates
+        # the otherwise slow tearing onset.  phi is the stream function; the flow
+        # is v = z_hat x grad(phi), so we seed the vorticity w = laplacian(phi).
+        vpert = getattr(cfg, "vpert", 0.0)
+        if vpert != 0.0:
+            phi0 = (vpert * np.sin(kx0 * self.x)
+                    * (np.exp(-((y - 0.25 * L) / (2 * a))**2)
+                       - np.exp(-((y - 0.75 * L) / (2 * a))**2)))
+            w_hat = -self.k2 * (self._fft(phi0) * self.dealias)
+        else:
+            w_hat = np.zeros_like(psi_hat)            # start from rest
+
+        # Uniform cool background "temperature" T = 1; reconnection will heat it.
+        T_hat = self._fft(np.ones_like(y))
+        return psi_hat, w_hat, T_hat
+
+    # -- fields from state ---------------------------------------------------
+    # The evolved state is (psi, w, T).  The velocity is diagnosed from the
+    # vorticity by inverting a Poisson equation -- trivial in spectral space.
+    def phi_hat(self, w_hat):
+        # w = laplacian(phi)  =>  -k^2 phi_hat = w_hat  =>  phi_hat = -w_hat/k^2.
+        # (Elliptic inversion that makes the flow incompressible, div v = 0.)
+        return -w_hat * self.k2_inv
+
+    def j_hat(self, psi_hat):
+        # Out-of-plane current density j = laplacian(psi) = -k^2 psi_hat
+        # (Ampere's law in the reduced-MHD normalisation mu0 = 1).
+        return -self.k2 * psi_hat
+
+    def fields(self):
+        """Return a dict of real-space diagnostic fields for plotting."""
+        psi = self._ifft(self.psi_hat)
+        w = self._ifft(self.w_hat)
+        T = self._ifft(self.T_hat)
+        j = self._ifft(self.j_hat(self.psi_hat))
+        ph = self.phi_hat(self.w_hat)
+        vx = -self._ifft(self._ddy(ph))
+        vy = self._ifft(self._ddx(ph))
+        Bx = -self._ifft(self._ddy(self.psi_hat))
+        By = self._ifft(self._ddx(self.psi_hat))
+        speed = np.sqrt(vx**2 + vy**2)
+        return dict(psi=psi, w=w, T=T, j=j, vx=vx, vy=vy,
+                    Bx=Bx, By=By, speed=speed)
+
+    # -- nonlinear RHS -------------------------------------------------------
+    def _rhs(self, psi_hat, w_hat, T_hat):
+        """Nonlinear (advective + source) part of the reduced-MHD equations.
+
+        Returns ONLY the non-stiff terms; the linear diffusion (eta,nu,kappa *
+        laplacian) is applied separately and exactly by the integrating factor
+        in _step().  All three equations are from reduced MHD [Strauss 1976 [6];
+        Biskamp 2000 [11]], with the heating term mirroring a resistive-MHD
+        energy equation [Arber et al. 2001 [13]].
+        """
+        ph = self.phi_hat(w_hat)      # stream function (flow) from vorticity
+        jh = self.j_hat(psi_hat)      # current from flux function
+        j = self._ifft(jh)
+        w = self._ifft(w_hat)
+
+        # INDUCTION  d psi/dt = -[phi,psi] (+ eta*lap):  flux is advected by the
+        # flow (the [phi,psi] term IS the "frozen-in" condition) and slips
+        # across field lines only through resistivity -> this is what lets field
+        # lines reconnect [Biskamp 2000 [11]; Priest & Forbes 2000 [12]].
+        rhs_psi = -self._bracket(ph, psi_hat)
+
+        # VORTICITY  d w/dt = -[phi,w] + [psi,j] (+ nu*lap):  curl of the
+        # momentum equation.  -[phi,w] advects vorticity; +[psi,j] = curl(J x B)
+        # is the LORENTZ FORCE that launches the Alfvenic reconnection outflow
+        # jets out of the X-point [Strauss 1976 [6]].
+        rhs_w = -self._bracket(ph, w_hat) + self._bracket(psi_hat, jh)
+
+        # ENERGY  d T/dt = -[phi,T] + (eta*j^2 + nu*w^2) (+ kappa*lap):  the
+        # internal energy is advected and irreversibly HEATED by Ohmic (eta*j^2)
+        # and viscous (nu*w^2) dissipation -- the coronal-heating term, and the
+        # same dissipation bookkeeping used by Lare3D [Arber et al. 2001 [13];
+        # Klimchuk 2006 [17]].
+        heat_src = self.cfg.eta * j**2 + self.cfg.nu * w**2
+        rhs_T = -self._bracket(ph, T_hat) + self._fft(heat_src) * self.dealias
+
+        return rhs_psi, rhs_w, rhs_T
+
+    # -- integrating-factor RK4 ----------------------------------------------
+    # The diffusion operators make the equations STIFF: an explicit scheme would
+    # need dt ~ dx^2/eta.  We remove that restriction by the integrating-factor
+    # (exponential) method: each linear operator -D*k^2 is integrated EXACTLY via
+    # the factor exp(-D*k^2*dt), and only the nonlinear part is advanced by RK4
+    # [Cox & Matthews 2002 [15]; Kassam & Trefethen 2005 [16]; Trefethen 2000].
+    # E_* are the full-step factors, E2_* the half-step factors used by RK4.
+    def _build_int_factors(self, dt):
+        self.dt = dt
+        self.E_psi = np.exp(-self.cfg.eta * self.k2 * dt)
+        self.E_w = np.exp(-self.cfg.nu * self.k2 * dt)
+        self.E_T = np.exp(-self.cfg.kappa * self.k2 * dt)
+        self.E2_psi = np.exp(-self.cfg.eta * self.k2 * dt / 2)
+        self.E2_w = np.exp(-self.cfg.nu * self.k2 * dt / 2)
+        self.E2_T = np.exp(-self.cfg.kappa * self.k2 * dt / 2)
+
+    def _step(self):
+        # One integrating-factor RK4 step.  Identical in structure to classic
+        # RK4 but the state is carried along the exact diffusive decay between
+        # stages by the E/E2 factors [Cox & Matthews 2002 [15]].
+        dt = self.dt
+        p, w, T = self.psi_hat, self.w_hat, self.T_hat
+        Ep, Ew, ET = self.E_psi, self.E_w, self.E_T
+        Ep2, Ew2, ET2 = self.E2_psi, self.E2_w, self.E2_T
+
+        k1p, k1w, k1T = self._rhs(p, w, T)
+        k1p, k1w, k1T = dt * k1p, dt * k1w, dt * k1T
+
+        k2p, k2w, k2T = self._rhs(Ep2 * (p + 0.5 * k1p),
+                                  Ew2 * (w + 0.5 * k1w),
+                                  ET2 * (T + 0.5 * k1T))
+        k2p, k2w, k2T = dt * k2p, dt * k2w, dt * k2T
+
+        k3p, k3w, k3T = self._rhs(Ep2 * p + 0.5 * k2p,
+                                  Ew2 * w + 0.5 * k2w,
+                                  ET2 * T + 0.5 * k2T)
+        k3p, k3w, k3T = dt * k3p, dt * k3w, dt * k3T
+
+        k4p, k4w, k4T = self._rhs(Ep * p + Ep2 * k3p,
+                                  Ew * w + Ew2 * k3w,
+                                  ET * T + ET2 * k3T)
+        k4p, k4w, k4T = dt * k4p, dt * k4w, dt * k4T
+
+        self.psi_hat = (Ep * p + (Ep * k1p + 2 * Ep2 * (k2p + k3p) + k4p) / 6.0)
+        self.w_hat = (Ew * w + (Ew * k1w + 2 * Ew2 * (k2w + k3w) + k4w) / 6.0)
+        self.T_hat = (ET * T + (ET * k1T + 2 * ET2 * (k2T + k3T) + k4T) / 6.0)
+
+        # Accumulate the volume-integrated dissipation for the energy budget:
+        # total Ohmic heating  Q_ohm = integral eta*j^2 dV dt, viscous heating
+        # Q_visc = integral nu*w^2 dV dt.  In a closed system these must balance
+        # the magnetic-energy decrease (Poynting/energy conservation), which the
+        # diagnostics plot verifies [Biskamp 2000 [11]; Arber et al. 2001 [13]].
+        j = self._ifft(self.j_hat(self.psi_hat))
+        w_r = self._ifft(self.w_hat)
+        self._Q_ohm += self.cfg.eta * np.mean(j**2) * dt
+        self._Q_visc += self.cfg.nu * np.mean(w_r**2) * dt
+        self._t += dt
+
+    # -- diagnostics ---------------------------------------------------------
+    def _energies(self):
+        # Volume-averaged magnetic energy E_mag = <|B|^2>/2 and kinetic energy
+        # E_kin = <|v|^2>/2 (rho=mu0=1).  Reconnection converts E_mag into E_kin
+        # (outflow jets) and heat; tracking the trade-off is the whole point.
+        ph = self.phi_hat(self.w_hat)
+        Bx = -self._ifft(self._ddy(self.psi_hat))
+        By = self._ifft(self._ddx(self.psi_hat))
+        vx = -self._ifft(self._ddy(ph))
+        vy = self._ifft(self._ddx(ph))
+        E_mag = 0.5 * np.mean(Bx**2 + By**2)
+        E_kin = 0.5 * np.mean(vx**2 + vy**2)
+        return E_mag, E_kin
+
+    def _record(self):
+        E_mag, E_kin = self._energies()
+        self.hist["t"].append(self._t)
+        self.hist["E_mag"].append(E_mag)
+        self.hist["E_kin"].append(E_kin)
+        self.hist["Q_ohm"].append(self._Q_ohm)
+        self.hist["Q_visc"].append(self._Q_visc)
+
+    def _max_speed(self):
+        # Fastest signal speed = max(|v| + |B|): flow speed plus the Alfven speed
+        # |B| (=v_A in these units), the relevant characteristic for the CFL
+        # limit on advection of the fields [Courant, Friedrichs & Lewy 1928 [19]].
+        ph = self.phi_hat(self.w_hat)
+        vx = -self._ifft(self._ddy(ph))
+        vy = self._ifft(self._ddx(ph))
+        Bx = -self._ifft(self._ddy(self.psi_hat))
+        By = self._ifft(self._ddx(self.psi_hat))
+        return float(np.max(np.sqrt(vx**2 + vy**2) + np.sqrt(Bx**2 + By**2)))
+
+    # -- main loop -----------------------------------------------------------
+    def run(self, on_frame=None):
+        """Integrate to ``t_end`` with an adaptive, time-based loop.
+
+        The time step adapts to the (Alfven/flow) CFL condition; frames are
+        captured at evenly spaced physical times so ``t_end`` is respected
+        regardless of how dt evolves.
+        """
+        cfg = self.cfg
+        # CFL condition [19]: an explicit scheme stays stable only if information
+        # crosses at most ~one grid cell per step, dt <= cfl * dx / max_speed.
+        vmax = max(self._max_speed(), 1.0)
+        dt = min(cfg.cfl * self.dx / vmax, cfg.dt_max)
+        self._build_int_factors(dt)
+
+        frame_dt = cfg.t_end / cfg.n_frames
+        next_frame_t = frame_dt
+        print(f"  dt0 = {dt:.4e}   target t_end = {cfg.t_end:.0f}   "
+              f"frames = {cfg.n_frames}")
+
+        # initial frame
+        self._record()
+        if on_frame is not None:
+            on_frame(self, 0)
+
+        t0 = time.time()
+        n = 0
+        while self._t < cfg.t_end - 1e-9:
+            # re-evaluate CFL periodically as the flow speed changes
+            if n % 25 == 0:
+                vmax = max(self._max_speed(), 1.0)
+                dt = min(cfg.cfl * self.dx / vmax, cfg.dt_max)
+            # clamp the final step so we land exactly on t_end
+            step_dt = min(dt, cfg.t_end - self._t)
+            if step_dt != self.dt:
+                self._build_int_factors(step_dt)
+            self._step()
+            n += 1
+
+            if self._t >= next_frame_t - 1e-9 or self._t >= cfg.t_end - 1e-9:
+                self._record()
+                if on_frame is not None:
+                    on_frame(self, n)
+                next_frame_t += frame_dt
+                pct = 100.0 * self._t / cfg.t_end
+                el = time.time() - t0
+                print(f"\r  t = {self._t:6.2f} / {cfg.t_end:.0f}  "
+                      f"({pct:5.1f}%)  E_mag={self.hist['E_mag'][-1]:.4f}  "
+                      f"E_kin={self.hist['E_kin'][-1]:.2e}  "
+                      f"Q_ohm={self._Q_ohm:.4e}  [{el:5.1f}s]",
+                      end="", flush=True)
+        print()
+        return self
+
+
+# ----------------------------------------------------------------------------
+# 3.  Visualisation
+# ----------------------------------------------------------------------------
+# The four panels show the four faces of reconnection:
+#   (1) current density j with field lines (psi contours) -> X-points & islands;
+#   (2) temperature T                                      -> where heating occurs;
+#   (3) flow speed |v| + quiver                            -> inflow/outflow jets;
+#   (4) energy budget                                      -> B-energy -> heat.
+# This mirrors how reconnection is diagnosed in the literature [Birn et al. 2001
+# [14] (the GEM challenge); Biskamp 2000 [11]].
+def make_animation(sim: ReconnectionMHD, frames: list, params: dict,
+                   out_base: str = "reconnection_coronal_heating"):
+    """Render the captured frames to an animation file."""
+    cfg = sim.cfg
+    L = cfg.L
+    extent = [0, L, 0, L]
+
+    fig, axes = plt.subplots(2, 2, figsize=(12.5, 11.0))
+    fig.patch.set_facecolor("#0a0a14")
+    plt.subplots_adjust(left=0.06, right=0.95, top=0.90, bottom=0.05,
+                        wspace=0.22, hspace=0.22)
+
+    vA = params.get("v_A_kms", None)            # plain float [km/s]
+    sub = (f"coronal current sheet  |  S = {1/cfg.eta:.0f},  Pm = {cfg.nu/cfg.eta:.0f}"
+           f"  |  {cfg.N}x{cfg.N} spectral")
+    if vA is not None:
+        sub += f"   |  v_A = {vA:.0f} km/s"
+    fig.suptitle("2D MHD Magnetic Reconnection & Coronal Heating\n" + sub,
+                 color="w", fontsize=14, fontweight="bold")
+
+    # consistent colour scales from the data range across frames
+    j_all = np.array([f["j"] for f in frames])
+    jmax = np.percentile(np.abs(j_all), 99.5)
+    T_all = np.array([f["T"] for f in frames])
+    Tmin, Tmax = 1.0, np.percentile(T_all, 99.8)
+    sp_all = np.array([f["speed"] for f in frames])
+    spmax = max(np.percentile(sp_all, 99.5), 1e-6)
+
+    ax_j, ax_T, ax_v, ax_e = axes.ravel()
+    for ax in (ax_j, ax_T, ax_v):
+        ax.set_facecolor("#0a0a14")
+        ax.set_xticks([]); ax.set_yticks([])
+        for s in ax.spines.values():
+            s.set_color("#444")
+
+    f0 = frames[0]
+    nlev = 22  # magnetic field-line (psi) contour levels
+
+    im_j = ax_j.imshow(f0["j"].T, origin="lower", extent=extent,
+                       cmap="RdBu_r", vmin=-jmax, vmax=jmax)
+    ct_j = ax_j.contour(sim.x, sim.y, f0["psi"], levels=nlev,
+                        colors="k", linewidths=0.6, alpha=0.7)
+    ax_j.set_title("Current density  j  &  magnetic field lines",
+                   color="w", fontsize=11)
+    cb = fig.colorbar(im_j, ax=ax_j, fraction=0.046, pad=0.02)
+    cb.ax.tick_params(colors="w", labelsize=7)
+    cb.outline.set_edgecolor("#444")
+
+    im_T = ax_T.imshow(f0["T"].T, origin="lower", extent=extent,
+                       cmap="inferno", vmin=Tmin, vmax=Tmax)
+    ct_T = ax_T.contour(sim.x, sim.y, f0["psi"], levels=nlev,
+                        colors="cyan", linewidths=0.4, alpha=0.35)
+    ax_T.set_title("Plasma heating  T  (Ohmic + viscous)",
+                   color="w", fontsize=11)
+    cb = fig.colorbar(im_T, ax=ax_T, fraction=0.046, pad=0.02)
+    cb.ax.tick_params(colors="w", labelsize=7)
+    cb.outline.set_edgecolor("#444")
+
+    im_v = ax_v.imshow(f0["speed"].T, origin="lower", extent=extent,
+                       cmap="viridis", vmin=0, vmax=spmax)
+    # sparse quiver of reconnection outflows
+    s = max(1, cfg.N // 28)
+    q = ax_v.quiver(sim.x[::s, ::s], sim.y[::s, ::s],
+                    f0["vx"][::s, ::s], f0["vy"][::s, ::s],
+                    color="w", scale=spmax * 22, width=0.0030, alpha=0.85)
+    ax_v.set_title("Flow speed |v| & reconnection outflows",
+                   color="w", fontsize=11)
+    cb = fig.colorbar(im_v, ax=ax_v, fraction=0.046, pad=0.02)
+    cb.ax.tick_params(colors="w", labelsize=7)
+    cb.outline.set_edgecolor("#444")
+
+    # energy-budget panel
+    ax_e.set_facecolor("#12121e")
+    ax_e.tick_params(colors="w", labelsize=8)
+    for sname in ax_e.spines.values():
+        sname.set_color("#444")
+    th = np.array(sim.hist["t"])
+    Em = np.array(sim.hist["E_mag"]); Em0 = Em[0]
+    Ek = np.array(sim.hist["E_kin"])
+    Qo = np.array(sim.hist["Q_ohm"])
+    Qv = np.array(sim.hist["Q_visc"])
+    ax_e.plot(th, Em0 - Em, color="#ff5555", lw=2, label="magnetic energy released")
+    ax_e.plot(th, Ek, color="#55aaff", lw=2, label="kinetic energy")
+    ax_e.plot(th, Qo, color="#ffaa33", lw=2, label="cumulative Ohmic heat")
+    ax_e.plot(th, Qv, color="#aa66ff", lw=1.6, ls="--", label="cumulative viscous heat")
+    ax_e.set_xlabel("time  t / tau_A", color="w", fontsize=9)
+    ax_e.set_ylabel("energy (code units)", color="w", fontsize=9)
+    ax_e.set_title("Energy conversion:  B-field -> flows + heat",
+                   color="w", fontsize=11)
+    ax_e.legend(loc="upper left", fontsize=7.5, facecolor="#12121e",
+                edgecolor="#444", labelcolor="w")
+    ax_e.grid(alpha=0.15, color="w")
+    tmark = ax_e.axvline(th[0], color="w", lw=1.0, alpha=0.7)
+
+    time_txt = fig.text(0.5, 0.925, "", color="w", fontsize=11,
+                        ha="center", fontweight="bold")
+
+    state = {"ct_j": ct_j, "ct_T": ct_T}
+
+    def update(i):
+        f = frames[i]
+        im_j.set_data(f["j"].T)
+        im_T.set_data(f["T"].T)
+        im_v.set_data(f["speed"].T)
+        q.set_UVC(f["vx"][::s, ::s], f["vy"][::s, ::s])
+
+        # contours must be redrawn each frame
+        for coll in list(state["ct_j"].collections if hasattr(state["ct_j"], "collections") else []):
+            coll.remove()
+        try:
+            state["ct_j"].remove()
+        except Exception:
+            pass
+        try:
+            state["ct_T"].remove()
+        except Exception:
+            pass
+        state["ct_j"] = ax_j.contour(sim.x, sim.y, f["psi"], levels=nlev,
+                                     colors="k", linewidths=0.6, alpha=0.7)
+        state["ct_T"] = ax_T.contour(sim.x, sim.y, f["psi"], levels=nlev,
+                                     colors="cyan", linewidths=0.4, alpha=0.35)
+
+        tval = f["t"]
+        tmark.set_xdata([tval, tval])
+        tau_s = params.get("tau_A_s")           # plain float [s], or None
+        extra = f"   ( {tval * tau_s:.1f} s )" if tau_s else ""
+        time_txt.set_text(f"t = {tval:.1f} tau_A{extra}")
+        return [im_j, im_T, im_v, q, tmark, time_txt]
+
+    print("  rendering animation ...")
+    anim = animation.FuncAnimation(fig, update, frames=len(frames),
+                                   interval=80, blit=False)
+
+    out = _save_animation(anim, fig, out_base)
+    plt.close(fig)
+    return out
+
+
+def _save_animation(anim, fig, out_base):
+    """Save as mp4 if ffmpeg is present, else gif via Pillow."""
+    try:
+        writer = animation.FFMpegWriter(fps=15, bitrate=3200)
+        out = out_base + ".mp4"
+        anim.save(out, writer=writer, dpi=110,
+                  savefig_kwargs={"facecolor": fig.get_facecolor()})
+        print(f"  saved {out}")
+        return out
+    except Exception as exc:
+        print(f"  (ffmpeg unavailable: {exc.__class__.__name__}) -> GIF")
+        try:
+            writer = animation.PillowWriter(fps=12)
+            out = out_base + ".gif"
+            anim.save(out, writer=writer, dpi=90,
+                      savefig_kwargs={"facecolor": fig.get_facecolor()})
+            print(f"  saved {out}")
+            return out
+        except Exception as exc2:
+            print(f"  could not save animation: {exc2}")
+            return None
+
+
+def final_state_figure(sim: ReconnectionMHD, params: dict, f: dict = None,
+                       fname: str = "reconnection_final_state.png",
+                       label: str = "Peak reconnection"):
+    cfg = sim.cfg
+    L = cfg.L
+    extent = [0, L, 0, L]
+    if f is None:
+        f = sim.fields()
+        f["t"] = sim._t
+
+    fig, axes = plt.subplots(1, 3, figsize=(16.5, 5.6))
+    fig.patch.set_facecolor("#0a0a14")
+    plt.subplots_adjust(left=0.03, right=0.97, top=0.86, bottom=0.05, wspace=0.16)
+    fig.suptitle(f"{label} at t = {f['t']:.0f} tau_A   "
+                 f"(coronal current sheet, S = {1/cfg.eta:.0f})",
+                 color="w", fontsize=14, fontweight="bold")
+
+    jmax = np.percentile(np.abs(f["j"]), 99.5)
+    im0 = axes[0].imshow(f["j"].T, origin="lower", extent=extent,
+                         cmap="RdBu_r", vmin=-jmax, vmax=jmax)
+    axes[0].contour(sim.x, sim.y, f["psi"], levels=24, colors="k",
+                    linewidths=0.6, alpha=0.7)
+    axes[0].set_title("current sheets, X-points & magnetic islands",
+                      color="w", fontsize=10)
+    _style(axes[0], im0, fig)
+
+    Tmax = np.percentile(f["T"], 99.8)
+    im1 = axes[1].imshow(f["T"].T, origin="lower", extent=extent,
+                         cmap="inferno", vmin=1.0, vmax=Tmax)
+    axes[1].contour(sim.x, sim.y, f["psi"], levels=24, colors="cyan",
+                    linewidths=0.4, alpha=0.35)
+    axes[1].set_title("heated plasma (Ohmic + viscous dissipation)",
+                      color="w", fontsize=10)
+    _style(axes[1], im1, fig)
+
+    spmax = max(np.percentile(f["speed"], 99.5), 1e-6)
+    im2 = axes[2].imshow(f["speed"].T, origin="lower", extent=extent,
+                         cmap="viridis", vmin=0, vmax=spmax)
+    s = max(1, cfg.N // 30)
+    axes[2].quiver(sim.x[::s, ::s], sim.y[::s, ::s],
+                   f["vx"][::s, ::s], f["vy"][::s, ::s],
+                   color="w", scale=spmax * 22, width=0.003, alpha=0.85)
+    axes[2].set_title("reconnection outflow jets |v|", color="w", fontsize=10)
+    _style(axes[2], im2, fig)
+
+    fig.savefig(fname, dpi=130, facecolor=fig.get_facecolor())
+    plt.close(fig)
+    print(f"  saved {fname}")
+
+
+def _style(ax, im, fig):
+    ax.set_xticks([]); ax.set_yticks([])
+    ax.set_facecolor("#0a0a14")
+    for sname in ax.spines.values():
+        sname.set_color("#444")
+    cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02)
+    cb.ax.tick_params(colors="w", labelsize=7)
+    cb.outline.set_edgecolor("#444")
+
+
+def energy_history_figure(sim: ReconnectionMHD, params: dict,
+                          fname: str = "reconnection_energy_history.png"):
+    th = np.array(sim.hist["t"])
+    Em = np.array(sim.hist["E_mag"]); Em0 = Em[0]
+    Ek = np.array(sim.hist["E_kin"])
+    Qo = np.array(sim.hist["Q_ohm"])
+    Qv = np.array(sim.hist["Q_visc"])
+
+    fig, ax = plt.subplots(figsize=(9.5, 6.0))
+    fig.patch.set_facecolor("#0a0a14")
+    ax.set_facecolor("#12121e")
+    ax.plot(th, Em0 - Em, color="#ff5555", lw=2.2,
+            label="magnetic energy released  $E_{B,0}-E_B$")
+    ax.plot(th, Ek, color="#55aaff", lw=2.2, label="bulk kinetic energy  $E_K$")
+    ax.plot(th, Qo, color="#ffaa33", lw=2.2,
+            label=r"cumulative Ohmic heat  $\int\eta j^2\,dt$")
+    ax.plot(th, Qv, color="#aa66ff", lw=1.8, ls="--",
+            label=r"cumulative viscous heat  $\int\nu\omega^2\,dt$")
+    ax.plot(th, Ek + Qo + Qv, color="w", lw=1.2, ls=":",
+            label="kinetic + total heat")
+    ax.set_xlabel(r"time  $t/\tau_A$", color="w", fontsize=11)
+    ax.set_ylabel("energy (code units)", color="w", fontsize=11)
+    ax.set_title("Reconnection energy budget:  magnetic energy "
+                 "-> flows + plasma heating", color="w", fontsize=12)
+    ax.tick_params(colors="w")
+    for sname in ax.spines.values():
+        sname.set_color("#444")
+    ax.grid(alpha=0.15, color="w")
+    ax.legend(loc="upper left", fontsize=9, facecolor="#12121e",
+              edgecolor="#444", labelcolor="w")
+    fig.savefig(fname, dpi=130, facecolor=fig.get_facecolor())
+    plt.close(fig)
+    print(f"  saved {fname}")
+
+
+# ----------------------------------------------------------------------------
+# 4.  Main
+# ----------------------------------------------------------------------------
+def main(argv=None):
+    argv = argv or sys.argv[1:]
+    cfg = SimulationConfig()
+    # tiny CLI: optional quick/preview mode
+    if "--quick" in argv:
+        cfg.N = 128
+        cfg.t_end = 45.0
+        cfg.n_frames = 100
+        print("[quick mode: N=128]")
+
+    print("\n>>> 2D MHD magnetic reconnection -- coronal heating model\n")
+    params = coronal_parameters(verbose=True)
+
+    print("\n  initialising spectral resistive-MHD solver ...")
+    sim = ReconnectionMHD(cfg)
+
+    frames: list = []
+
+    def capture(s: ReconnectionMHD, n: int):
+        f = s.fields()
+        f["t"] = s._t
+        frames.append(f)
+
+    print("  integrating ...")
+    sim.run(on_frame=capture)
+
+    print("\n  building figures ...")
+    make_animation(sim, frames, params)
+
+    # still frame at the moment of most vigorous reconnection (peak kinetic
+    # energy) -- the sharpest current sheet / strongest outflow jets.  Skip the
+    # initial driving-flow transient so we capture reconnection, not the seed.
+    tcut = 0.2 * cfg.t_end
+    Ek = sim.hist["E_kin"]
+    cand = [i for i, fr in enumerate(frames) if fr["t"] > tcut]
+    peak = max(cand, key=lambda i: Ek[i]) if cand else int(np.argmax(Ek))
+    print(f"    peak reconnection at frame {peak} "
+          f"(t = {frames[peak]['t']:.1f} tau_A)")
+    final_state_figure(sim, params, f=frames[peak])
+    energy_history_figure(sim, params)
+
+    Em = sim.hist["E_mag"]
+    print("\n  summary")
+    print(f"    magnetic energy released : {Em[0] - Em[-1]:.4e}")
+    print(f"    final kinetic energy     : {sim.hist['E_kin'][-1]:.4e}")
+    print(f"    cumulative Ohmic heat    : {sim._Q_ohm:.4e}")
+    print(f"    cumulative viscous heat  : {sim._Q_visc:.4e}")
+    print("\n  done.\n")
+
+
+if __name__ == "__main__":
+    main()  
