@@ -1,5 +1,5 @@
 
-r"""
+"""
 Plasmoid-chain reconnection + field-line-coupled 1D coronal loop
 ================================================================
 
