@@ -1,5 +1,17 @@
 # Plasmoid-Chain Reconnection + Field-Line-Coupled Coronal Loop
 
+> **Correction (added after the parametric scaling study, see `README_scalings_and_kink.md`).**
+> Three claims below were overstated and should be read with these caveats:
+> 1. *"First plasmoid chain at S≈500 / N∝S^{3/8}"* — the Harris sheet in that run was **not held**,
+>    so it diffused on t ~ a²/η (≈1.5 τ_A at S=500, ≈30 τ_A at S=10⁴, comparable to the run), and the
+>    islands were dominated by the 24-mode **seed** (N_O = 32–36 at t = 0), not selected by tearing.
+>    The S-scan "6, 8, 8, 13" is therefore not evidence for the plasmoid-regime scaling.
+> 2. *"P = I·Φ̇ confirmed, ratio ≈ 1–2.7"* — I_sheet was thresholded arbitrarily (|j| > 0.25 j_max) and
+>    P was the whole-box Ohmic power, so the ratio was partly definitional rather than a discriminating test.
+> 3. Two citations were wrong and are fixed: Servidio et al. 2010 is *Phys. Plasmas* **17**, 032315, and the
+>    Fuselier et al. 2022 article ID is **e2022JA030354**.
+> The 2D solver itself *is* verified (growth rates match an independent eigenvalue solver to ≲0.5 %).
+
 An **updated** model (`plasmoid_chain_coronal_loop.py`) that extends the base 2D
 resistive-MHD reconnection code toward higher Lundquist number until a thin
 current sheet fragments into a **plasmoid chain**, and adds the physically
@@ -96,8 +108,8 @@ result that intermittent reconnection sustains the loop.
 | Plasmoid instability, `S_c~10⁴` | Loureiro, Schekochihin & Cowley 2007, *Phys. Plasmas* **14**, 100703 |
 | `N ∝ S^{3/8}` | Samtaney et al. 2009, *PRL* **103**, 105004 |
 | Fast plasmoid reconnection | Bhattacharjee et al. 2009, *Phys. Plasmas* **16**, 112102 |
-| X/O critical-point detection | Servidio et al. 2010, *JGR* **115**, A05111 |
-| **Multiple reconnection X-lines** | **Fuselier et al. 2022, *JGR Space Phys.* **127**, e2022JA030281** |
+| X/O critical-point detection | Servidio et al. 2010, *Phys. Plasmas* **17**, 032315 |
+| **Multiple reconnection X-lines** | **Fuselier et al. 2022, *JGR Space Phys.* **127**, e2022JA030354** |
 | **P = I·Φ̇** | **Longcope & Tarr 2015, *Phil. Trans. R. Soc. A* **373**, 20140263** |
 | **TRANSP (P = I·V_loop)** | **Pankin et al. 2025, *Comput. Phys. Commun.* **312**, 109611** |
 | **3D MHD → 1D loop coupling** | **Reid, Cargill, Johnston & Hood 2021, *MNRAS* **505**, 4141** |
