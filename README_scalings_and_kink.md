@@ -198,14 +198,28 @@ next 50 τ_A).
 | 64 | 32 | 1e-3 | 118 | viscosity delays the onset ×2.3 |
 | 64 | 32 | 1e-4 (6π) | 60 vs 70 | |
 
-So the trend is monotone: **finer perpendicular grids make this loop more stable**. Two readings are possible and the
-data so far cannot separate them: (i) the instability seen at N ≤ 96 is partly a low-resolution artefact (e.g. spectral
-truncation of the thin return-current shell, or the cell/vertex averaging of the [ψ,j] term, acting as a perturbation of
-the equilibrium); or (ii) the true line-tied mode has thin resonant layers that a resolved viscosity ν = 2×10⁻⁴ damps,
-so that the threshold in this *viscous* model moves up with N while the ideal-limit threshold stays lower. Either way,
-**Φ_c ≈ 3.6π and all growth rates/onset times quoted for N ≤ 96 are properties of the discretisation, not results about
-loops.** Follow-up runs at N = 128 with lower viscosity and with a much stronger twist were launched to discriminate (see
-the end of this section for their outcome if they finished).
+Follow-up runs at N = 128 (same equilibrium, `kink_conv3d_b.json`) settle the interpretation:
+
+| N | Φ₀ | ν | t_nl | outcome |
+|---|---|---|---|---|
+| 128 | 7π | 2e-4 | — | no growth by t = 170 |
+| 128 | 7π | 1e-4 | 116 | **unstable** |
+| 128 | 7π | 5e-5 | 88 | **unstable** |
+| 128 | 10π | 2e-4 | 98 | **unstable** |
+
+**So the kink is a real mode, not a numerical artefact — but its fine radial/axial structure is damped by a *resolved*
+viscosity.** At N = 128 the 7π loop is stable at ν = 2×10⁻⁴ yet unstable at ν = 10⁻⁴ and 5×10⁻⁵ (onset 116 → 88 τ_A,
+approaching the ideal value from above as ν falls), and a stronger twist (10π) is unstable even at ν = 2×10⁻⁴. The coarse
+grids (N ≤ 96) cannot represent the mode's thin structure, so they under-resolve its viscous damping and over-predict
+instability at a given ν. Consequences:
+
+* The **N = 64 threshold Φ_c ≈ 3.6π is not valid** (it is an under-resolved, viscosity-blind number). At ν = 2×10⁻⁴ the
+  converged threshold lies above 7π; its ideal-limit value (ν → 0) was not determined.
+* The **N = 64 onset times (52 τ_A at 7π) are too short**; the better-resolved, low-viscosity value is ≈ 88 τ_A — close to
+  the Lare3D onset of ≈ 50–100 τ_A, but I would not call that agreement quantitative.
+* The **N = 80, ν = 2×10⁻⁴, 7π event of §3 is unstable only because the grid is coarse** (the same loop is stable at
+  N = 128, ν = 2×10⁻⁴). Its end-state diagnostics are still meaningful as a property of the nonlinear relaxation, but it
+  is not a converged loop. The resolved counterpart is the 10π, N = 128 run (§3.2).
 
 What survives: (a) the solver verification (§2.2); (b) the qualitative stabilisation by the return-current shell (the
 p = 1 profile, whose twist is concentrated at the axis, stays stable up to 14π at N=64); (c) the 1/L scaling of the
@@ -264,23 +278,17 @@ afterwards. No feedback of the density on the MHD is included (Reid et al. discu
 
 ---
 
-## 4. Status of the open question, and how to finish it
+## 4. What this means for the 3D results (summary of reliability)
 
-Three N = 128 runs and a 10π, N = 128 production run were still executing when this write-up was frozen; they decide
-between readings (i) and (ii) in §2.3. They write to files and do not change any number above:
-
-| job | question | output file |
-|---|---|---|
-| N=128, 7π, ν = 5×10⁻⁵ | does lower viscosity restore the instability at fine resolution? | `scaling_results/kink_conv3d_b.json` |
-| N=128, 7π, ν = 1×10⁻⁴ | same, intermediate | `scaling_results/kink_conv3d_b.json` |
-| N=128, 10π, ν = 2×10⁻⁴ | is a much stronger twist unstable at fine resolution? | `scaling_results/kink_conv3d_b.json` |
-| N=128, 10π production (anomalous η, snapshots) | a resolved version of the §3 event | `scaling_results/kink_production_N128_10pi.npz` |
-
-Reading the outcome: if the lower-viscosity or 10π runs go unstable at N = 128, the kink is physical and the §3 event is
-a (resolution-limited) member of the same family — then re-run `kink_figure.py` with
-`KINK_PROD=scaling_results/kink_production_N128_10pi.npz KINK_OUT=kink_loop_3d_N128.png` for the converged version. If
-none of them grows, the N ≤ 96 kink should be regarded as an artefact of the discretisation and §3 as a demonstration of
-the machinery (relaxation, helicity, field-line coupling), not of loop physics.
+| claim | status |
+|---|---|
+| solver correctness (line-tied Alfvén period, static equilibrium, energy, 1/L scaling) | ✅ verified |
+| zero-net-current return shell stabilises: p = 1 profile stable to 14π | ✅ (N = 64; direction robust, number not) |
+| kink onset time, growth rate, threshold at N ≤ 96 | ❌ not converged (resolution- and viscosity-dependent) |
+| kink exists and is damped by resolved viscosity | ✅ N = 128 runs (§2.3) |
+| ν → 0 (ideal) threshold | ❓ not determined |
+| end-state: release fraction, helicity conservation, relaxed radius, partition | ✅ qualitatively robust; the Ohmic:viscous split is not |
+| 1D-loop response | ✅ procedure; amplitudes depend on assumed B, n, a and are single-event |
 
 ## 5. Running it
 
