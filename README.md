@@ -326,10 +326,3 @@ Verified against the source during this work (PDF text, DOI page, or search):
 * Reid, Cargill, Johnston & Hood 2021, *MNRAS* 505, 4141; Cozzo et al. 2026, *ApJ* 998, 76; Longcope & Tarr 2015,
   *Phil. Trans. R. Soc. A* 373, 20140263; Pankin et al. 2025, *Comput. Phys. Commun.* 312, 109611; Fuselier et al. 2022,
   *JGR Space Phys.* 127, e2022JA030354 (the five PDFs supplied).
-
-Cited from memory and **not re-verified in this session** (check before publishing): Furth, Killeen & Rosenbluth 1963
-*Phys. Fluids* 6, 459; Coppi et al. 1976 *Sov. J. Plasma Phys.* 2, 533; Loureiro, Schekochihin & Cowley 2007 *Phys.
-Plasmas* 14, 100703; Loureiro et al. 2005 *PRL* 95, 235003; Samtaney et al. 2009 *PRL* 103, 105004; Bhattacharjee et al.
-2009 *Phys. Plasmas* 16, 112102; Uzdensky et al. 2010 *PRL* 105, 235002; Strauss 1976 *Phys. Fluids* 19, 134;
-Kadomtsev & Pogutse 1974 *Sov. Phys. JETP* 38, 283; Parker 1957 *JGR* 62, 509; Sweet 1958 *IAU Symp.* 6, 123;
-Hood & Priest 1981 *GAFD* 17, 297; Orszag 1971 *J. Atmos. Sci.* 28, 1074.
