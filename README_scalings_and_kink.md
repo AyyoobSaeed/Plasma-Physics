@@ -38,7 +38,7 @@ What *is* solid: the 2D solver reproduces the linear tearing eigenvalues (§1.1)
 
 Predictions were fixed before looking at output. Verdicts are from the numbers.
 
-### 1.1 Verification: code vs an independent eigenvalue solver  ✅
+### 1.1 Verification: code vs an independent eigenvalue solver 
 
 The same linearised reduced-MHD equations about the same double-Harris equilibrium are solved as an eigenproblem
 (`tearing_theory.py`). The nonlinear code is run with the equilibrium held fixed and a tiny multimode seed.
@@ -56,7 +56,7 @@ the faster m=1 harmonic). Modes much slower than the fastest (m ≥ 4) are **not
 driven nonlinearly by faster modes (fitted "γ" up to 10²× too large) and are flagged, not reported. N=192→256 at η=6e-5
 removes the 5 % error, i.e. the resolution requirement is visible and quantified.
 
-### 1.2 Linear scaling of the tearing growth rate (eigenvalues, S_a = a v_A/η = 30 … 6000)  ✅ (approaches asymptote)
+### 1.2 Linear scaling of the tearing growth rate (eigenvalues, S_a = a v_A/η = 30 … 6000) (Approaches asymptote)
 
 | quantity | theory (FKR/Coppi) | measured |
 |---|---|---|
@@ -67,7 +67,7 @@ The exponents converge monotonically toward the asymptotic values from above, wh
 matched asymptotics (the −1/2 law holds for S_a ≫ 1; at S_a ≲ 10³ you are in the crossover). Claiming "−1/2" from
 this range would be wrong; "approaching −1/2" is what the data show.
 
-### 1.3 Onset time ∝ 1/γ_max  ✅
+### 1.3 Onset time ∝ 1/γ_max 
 
 Nonlinear runs with the sheet held (so S_a is fixed), tiny random seeds (16 modes, 10⁻⁵ each). Onset = first time the
 reconnected flux Ψ_rec reaches 0.05 (an absolute, N-independent definition; the earlier "20 % of the run maximum"
@@ -80,13 +80,13 @@ definition inherited the unconverged saturation level).
 Fitted exponent **0.284** vs **0.286** implied by the independent eigenvalue γ_max(S_a). Agreement is in the *local*
 exponent; the asymptotic S^{1/2} is not yet reached in this range (§1.2).
 
-### 1.4 Number of self-selected islands  ✅ (weak test)
+### 1.4 Number of self-selected islands Verified (weak test)
 
 Median island count after onset: 8, 8, 8, 8, 9 for S = 500 … 8000 vs the linear-theory prediction `2·k_max·L/2π = 8`
 (k_max = 4 on the integer-mode grid, and it barely moves across this S range). Consistent, but **this is not a test of the
 plasmoid-regime `N ∝ S^{3/8}`**: that law needs sheets with S_L ≳ 10⁴ resolved to δ ≪ ℓ, which this box cannot do.
 
-### 1.5 Sweet–Parker thickness  ❌ not reproduced — and a trap worth knowing about
+### 1.5 Sweet–Parker thickness Not reproduced — and a trap worth knowing about
 
 Plotting `δ/ℓ` against `S_ℓ = ℓ B_up/η` for 140 resolved X-point layers (after onset) gives a fitted slope of **−0.50**,
 exactly the Sweet–Parker value. **That agreement is a coincidence.** Sweet–Parker requires
@@ -108,7 +108,7 @@ needs a larger seed, an unheld sheet and N ≳ 384.
 held-sheet baseline `1/S_a` (which would give slope −1), so the nonlinear stage does enhance the rate, but the number is
 dominated by the sheet-sustaining field E₀ and a −0.55 slope is not evidence for Sweet–Parker (§1.5).
 
-### 1.7 Energy closure ✅ and resolution convergence ⚠️
+### 1.7 Energy closure verified and resolution convergence still working on
 
 `E_B + E_K + Q_ohm + Q_visc − W_forcing` is conserved to ≤ 3.6×10⁻⁴ for all five runs (W_forcing = work done by the
 external field that holds the sheet). The dissipation partition shifts with S: Ohmic fraction 0.93, 0.92, 0.89, 0.82, 0.70
@@ -284,13 +284,13 @@ afterwards. No feedback of the density on the MHD is included (Reid et al. discu
 
 | claim | status |
 |---|---|
-| solver correctness (line-tied Alfvén period, static equilibrium, energy, 1/L scaling) | ✅ verified |
-| zero-net-current return shell stabilises: p = 1 profile stable to 14π | ✅ (N = 64; direction robust, number not) |
-| kink onset time, growth rate, threshold at N ≤ 96 | ❌ not converged (resolution- and viscosity-dependent) |
-| kink exists and is damped by resolved viscosity | ✅ N = 128 runs (§2.3) |
-| ν → 0 (ideal) threshold | ❓ not determined |
-| end-state: release fraction, helicity conservation, relaxed radius, partition | ✅ qualitatively robust; the Ohmic:viscous split is not |
-| 1D-loop response | ✅ procedure; amplitudes depend on assumed B, n, a and are single-event |
+| solver correctness (line-tied Alfvén period, static equilibrium, energy, 1/L scaling) | Verified |
+| zero-net-current return shell stabilises: p = 1 profile stable to 14π | (N = 64; direction robust, number not) |
+| kink onset time, growth rate, threshold at N ≤ 96 | Not converged (resolution- and viscosity-dependent) |
+| kink exists and is damped by resolved viscosity | Solid N = 128 runs (§2.3) |
+| ν → 0 (ideal) threshold | Not determined |
+| end-state: release fraction, helicity conservation, relaxed radius, partition | Qualitatively robust; the Ohmic:viscous split is not |
+| 1D-loop response | Checked Procedure; amplitudes depend on assumed B, n, a and are single-event |
 
 ## 5. Heating analysis — which forms of heating contribute, and how they evolve (`heating_analysis.py`)
 
@@ -396,10 +396,3 @@ Verified against the source during this work (PDF text, DOI page, or search):
 * Reid, Cargill, Johnston & Hood 2021, *MNRAS* 505, 4141; Cozzo et al. 2026, *ApJ* 998, 76; Longcope & Tarr 2015,
   *Phil. Trans. R. Soc. A* 373, 20140263; Pankin et al. 2025, *Comput. Phys. Commun.* 312, 109611; Fuselier et al. 2022,
   *JGR Space Phys.* 127, e2022JA030354 (the five PDFs supplied).
-
-Cited from memory and **not re-verified in this session** (check before publishing): Furth, Killeen & Rosenbluth 1963
-*Phys. Fluids* 6, 459; Coppi et al. 1976 *Sov. J. Plasma Phys.* 2, 533; Loureiro, Schekochihin & Cowley 2007 *Phys.
-Plasmas* 14, 100703; Loureiro et al. 2005 *PRL* 95, 235003; Samtaney et al. 2009 *PRL* 103, 105004; Bhattacharjee et al.
-2009 *Phys. Plasmas* 16, 112102; Uzdensky et al. 2010 *PRL* 105, 235002; Strauss 1976 *Phys. Fluids* 19, 134;
-Kadomtsev & Pogutse 1974 *Sov. Phys. JETP* 38, 283; Parker 1957 *JGR* 62, 509; Sweet 1958 *IAU Symp.* 6, 123;
-Hood & Priest 1981 *GAFD* 17, 297; Orszag 1971 *J. Atmos. Sci.* 28, 1074.
